@@ -4,3 +4,4 @@ loguru
 google-genai
 python-dotenv
 ta
+ollama
