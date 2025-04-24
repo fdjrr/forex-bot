@@ -118,7 +118,6 @@ def main():
                 os.remove(path)
 
             for tf in tfs:
-                # rates = mt5.copy_rates_range(symbol, tf, utc_from, utc_to)
                 rates = mt5.copy_rates_from_pos(symbol, tf, 0, 200)
                 current_price = mt5.symbol_info_tick(symbol).ask
 
@@ -126,9 +125,9 @@ def main():
                 df["time"] = pd.to_datetime(df["time"], unit="s")
 
                 # Exponential Moving Average
-                df["EMA_50"] = SMAIndicator(
+                df["EMA_50"] = EMAIndicator(
                     close=df["close"], window=50
-                ).sma_indicator()
+                ).ema_indicator()
                 df["EMA_200"] = EMAIndicator(
                     close=df["close"], window=200
                 ).ema_indicator()
@@ -257,13 +256,9 @@ def main():
                     3. Berikan rekomendasi aksi: BUY, SELL, HOLD, atau WAIT & SEE, berdasarkan indikator teknikal.
                     4. Jika memberikan rekomendasi BUY atau SELL, tetapkan level Take Profit dan Stop Loss yang logis dan realistis.
                     5. Analisa harus logis, berbasis data teknikal, dan hindari narasi spekulatif atau ambigu.
-                    6. Kalau harga close dibawah harga open itu candle merah (SELL)
-                       Kalau harga close diatas harga open itu candle hijau (BUY)
-
-                       Jika ada 2 candle sama warna, maka price action sesuai dengan warna candle itu.
-                    7. Berikan tingkat confidence (keyakinan) terhadap hasil analisa dalam skala 1 sampai 100.
-                    8. Jangan rekomendasikan BUY atau SELL jika confidence < 70 atau sinyal teknikal tidak mendukung.
-                    9. Tetap melakukan analisa yang konsisten dari analisa sebelumnya.
+                    6. Berikan tingkat confidence (keyakinan) terhadap hasil analisa dalam skala 1 sampai 100.
+                    7. Jangan rekomendasikan BUY atau SELL jika confidence < 70 atau sinyal teknikal tidak mendukung.
+                    8. Tetap melakukan analisa yang konsisten dari analisa sebelumnya.
                     9. Fokus hanya pada analisa teknikal — tidak perlu memberikan penjelasan tambahan di luar kerangka response_schema.
                 """
 
