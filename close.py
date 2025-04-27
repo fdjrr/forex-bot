@@ -1,9 +1,14 @@
+import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import MetaTrader5 as mt5
+from dotenv import load_dotenv
 from loguru import logger
 
-symbol = "XAUUSDm"
+load_dotenv()
+
+symbol = os.getenv("SYMBOL")
 deviation = 20
 tp = 20
 
@@ -49,18 +54,26 @@ def main():
         logger.error(f"Symbol {symbol} tidak ditemukan atau tidak bisa dipilih.")
         return
 
+    now = time.time()
+    start_from = now + (60 * 5)
+
     while True:
-        positions = mt5.positions_get(symbol=symbol)
+        now = time.time()
 
-        if len(positions) > 0:
-            profit = sum(pos.profit for pos in positions)
+        if now > start_from:
+            positions = mt5.positions_get(symbol=symbol)
 
-            if profit >= tp:
-                logger.info(f"Profit mencapai {tp}. Menutup posisi.")
+            if len(positions) > 0:
+                profit = sum(pos.profit for pos in positions)
 
-                with ThreadPoolExecutor() as executor:
-                    for position in positions:
-                        executor.submit(close_position, position)
+                if profit >= tp:
+                    logger.info(f"Profit mencapai {tp}. Menutup posisi.")
+
+                    with ThreadPoolExecutor() as executor:
+                        for position in positions:
+                            executor.submit(close_position, position)
+
+            start_from = start_from + (60 * 5)
 
 
 if __name__ == "__main__":
