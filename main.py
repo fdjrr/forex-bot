@@ -1,8 +1,10 @@
+import csv
 import enum
 import json
 import os
 import pathlib
 import random
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
@@ -13,7 +15,8 @@ from google import genai
 from google.genai import types
 from loguru import logger
 from pydantic import BaseModel
-from ta.trend import EMAIndicator
+from ta.momentum import StochasticOscillator
+from ta.trend import EMAIndicator, PSARIndicator
 from ta.volatility import BollingerBands
 from ta.volume import OnBalanceVolumeIndicator
 
@@ -22,12 +25,13 @@ load_dotenv()
 symbol = os.getenv("SYMBOL")
 tfs = [
     (mt5.TIMEFRAME_M1, 200),
-    (mt5.TIMEFRAME_M5, 200),
-    (mt5.TIMEFRAME_M15, 200),
-    (mt5.TIMEFRAME_M30, 200),
+    # (mt5.TIMEFRAME_M5, 200),
+    # (mt5.TIMEFRAME_M15, 200),
+    # (mt5.TIMEFRAME_M30, 200),
 ]
 lot = 0.01
 deviation = 20
+last_analysis = None
 
 
 class PriceAction(enum.Enum):
@@ -55,6 +59,18 @@ def get_rates(symbol, tf, count=200):
     df = pd.DataFrame(rates)
     df["time"] = pd.to_datetime(df["time"], unit="s")
 
+    # Parabolic SAR
+    sar = PSARIndicator(high=df["high"], low=df["low"], acceleration=0.02, maximum=0.2)
+    df["PSAR"] = sar.parabolic_sar()
+
+    # Stochastic Oscillator
+    df["STOCH_%K"] = StochasticOscillator(
+        high=df["high"], low=df["low"], close=df["close"], window=5, smooth_window=3
+    ).stochastic_oscillator()
+    df["STOCH_%D"] = StochasticOscillator(
+        high=df["high"], low=df["low"], close=df["close"], window=5, smooth_window=3
+    ).stochastic_oscillator()
+
     # Exponential Moving Average
     df["EMA_50"] = EMAIndicator(close=df["close"], window=50).ema_indicator()
     df["EMA_200"] = EMAIndicator(close=df["close"], window=200).ema_indicator()
@@ -76,6 +92,70 @@ def get_rates(symbol, tf, count=200):
     logger.info(f"Data saved to {path}")
 
     return df
+
+
+def get_positions():
+    path = "trade_log.csv"
+
+    if not os.path.exists(path):
+        with open(path, mode="w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(["order_type", "total", "profit", "last_closed_at"])
+
+    now = datetime.now()
+    positions = mt5.positions_get(symbol=symbol)
+
+    if len(positions) > 0:
+        profit = sum(pos.profit for pos in positions)
+        total = len(positions)
+        last_closed_at = now.strftime("%Y-%m-%d %H:%M:%S")
+        order_type = "BUY" if positions[0].type == mt5.ORDER_TYPE_BUY else "SELL"
+
+        with ThreadPoolExecutor() as executor:
+            for position in positions:
+                executor.submit(close_position, position)
+
+        logger.info(f"Profit: {profit}")
+
+        with open(path, mode="a", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow([order_type, total, profit, last_closed_at])
+
+        logger.info(f"Trade log saved to {path}")
+
+        logger.info("Sleeping for 2 minutes...")
+
+        time.sleep(120)
+
+
+def close_position(position):
+    logger.info(f"Closing position for {symbol}")
+
+    order = (
+        mt5.ORDER_TYPE_BUY
+        if position.type == mt5.ORDER_TYPE_SELL
+        else mt5.ORDER_TYPE_SELL
+    )
+
+    price = mt5.symbol_info_tick(symbol).ask
+
+    request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "position": position.ticket,
+        "symbol": symbol,
+        "volume": position.volume,
+        "type": order,
+        "price": price,
+        "deviation": deviation,
+        "magic": 234000,
+        "comment": "",
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": mt5.ORDER_FILLING_IOC,
+    }
+
+    result = mt5.order_send(request)
+
+    logger.info(result)
 
 
 def open_position(order):
@@ -102,6 +182,8 @@ def open_position(order):
 
 
 def analyze():
+    global last_analysis
+
     logger.info(f"Analyzing {symbol}")
 
     contents = []
@@ -118,23 +200,28 @@ def analyze():
         )
 
     prompt = f"""
-        Berikut ini adalah data harga untuk simbol {symbol}:
+Analisa sebelumnya : {last_analysis}
 
-        Indikator yang digunakan antara lain:
-        - EMA 50, EMA 200
-        - On Balance Volume
-        - Bollinger Bands (20,2)
+Data candle untuk simbol {symbol}:
 
-        Tugas kamu adalah menganalisa data tersebut secara mendalam. Lakukan hal berikut:
+Indikator yang digunakan antara lain:
+- EMA 50, EMA 200
+- On Balance Volume
+- Bollinger Bands (20,2)
+- Parabollic SAR (0.02, 0.2)
+- Stochastic Oscillator (5,3)
 
-        1. Tentukan area support dan resistance terdekat berdasarkan struktur harga dan volume.
-        3. Berikan rekomendasi aksi: BUY, SELL, HOLD, atau WAIT & SEE, berdasarkan indikator teknikal.
-        4. Jika memberikan rekomendasi BUY atau SELL, tetapkan level Take Profit dan Stop Loss yang logis dan realistis.
-        5. Analisa harus logis, berbasis data teknikal, dan hindari narasi spekulatif atau ambigu.
-        6. Berikan tingkat confidence (keyakinan) terhadap hasil analisa dalam skala 1 sampai 10.
-        7. Jangan rekomendasikan BUY atau SELL jika confidence < 8 atau sinyal teknikal tidak mendukung.
-        8. Tetap melakukan analisa yang konsisten dari analisa sebelumnya.
-        9. Fokus hanya pada analisa teknikal — tidak perlu memberikan penjelasan tambahan di luar kerangka response_schema.
+Tugas kamu adalah menganalisa data candle tersebut secara mendalam. Lakukan hal berikut:
+
+1. Analisa semua data candle yang ada. Analisa harus logis, berbasis data teknikal, dan hindari narasi spekulatif atau ambigu.
+2. Tentukan satu area support dan resistance terdekat berdasarkan struktur candle dan volume dari semua data candle yang ada.
+3. Berikan price_action: BUY, SELL, HOLD, atau WAIT & SEE, berdasarkan struktur candle dan volume serta indikator teknikal.
+4. Hanya berikan price_action jika minimal dua dari tiga indikator menunjukkan sinyal yang kuat dan tidak saling bertentangan.
+5. Jika memberikan price_action BUY atau SELL, tetapkan level Take Profit dan Stop Loss yang logis dan realistis dari semua data candle yang ada.
+6. Berikan tingkat confidence (keyakinan) terhadap hasil analisa dalam skala 1 sampai 10.
+7. Jangan beriakan price_ction BUY atau SELL jika confidence < 8 atau struktur candle dan volume serta indikator teknikal tidak mendukung.
+8. Tetap melakukan analisa yang konsisten dari analisa sebelumnya.
+9. Fokus hanya pada analisa — tidak perlu memberikan penjelasan tambahan di luar kerangka response_schema.
     """
 
     config = types.GenerateContentConfig(
@@ -158,6 +245,8 @@ def analyze():
         )
 
         logger.info(response.text)
+
+        last_analysis = response.text
 
         data = json.loads(response.text)
 
@@ -189,6 +278,8 @@ def main():
     while True:
         now = datetime.now()
         if now.second == 0:
+
+            get_positions()
 
             with ThreadPoolExecutor() as executor:
                 for tf, count in tfs:
