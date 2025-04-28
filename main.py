@@ -32,6 +32,7 @@ tfs = [
 lot = 0.1
 deviation = 20
 last_analysis = None
+loop = 1
 
 
 class Signal(enum.Enum):
@@ -98,8 +99,10 @@ def get_rates(symbol, tf, count=200):
     ).on_balance_volume()
 
     # Parabolic SAR
-    sar = PSARIndicator(high=df["high"], low=df["low"], acceleration=0.02, maximum=0.2)
-    df["PSAR"] = sar.parabolic_sar()
+    psar_indicator = PSARIndicator(
+        high=df["high"], low=df["low"], close=df["close"], step=0.02, max_step=0.2
+    )
+    df["PSAR"] = psar_indicator.psar()
 
     # Stochastic Oscillator
     stoch = StochasticOscillator(
@@ -191,11 +194,7 @@ def close_position(position):
 def open_position(order):
     logger.info(f"Opening position for {symbol}")
 
-    point = mt5.symbol_info(symbol).point
     price = mt5.symbol_info_tick(symbol).ask
-
-    sl = price - 1000 * point
-    tp = price + 300 * point
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -203,8 +202,6 @@ def open_position(order):
         "volume": lot,
         "type": order,
         "price": price,
-        "sl": sl,
-        "tp": tp,
         "deviation": deviation,
         "magic": 234000,
         "comment": "",
@@ -286,7 +283,7 @@ Tugas kamu adalah menganalisa data candle tersebut secara mendalam. Lakukan hal 
             order = mt5.ORDER_TYPE_BUY if signal == "BUY" else mt5.ORDER_TYPE_SELL
 
             with ThreadPoolExecutor() as executor:
-                for x in range(10):
+                for x in range(loop):
                     executor.submit(open_position, order)
 
     except Exception as e:
@@ -305,7 +302,9 @@ def main():
         return
 
     now = time.time()
-    start_from = now + (60 * 5)
+    start_from = now + (60 * 1)
+
+    logger.info("Starting...")
 
     while True:
         now = time.time()
@@ -320,7 +319,7 @@ def main():
 
             analyze()
 
-            start_from = start_from + (60 * 5)
+            start_from = start_from + (60 * 1)
 
 
 if __name__ == "__main__":
