@@ -30,6 +30,7 @@ tfs = [
     # (mt5.TIMEFRAME_M30, 200),
 ]
 lot = 0.1
+distance = 300
 deviation = 20
 last_analysis = None
 loop = 1
@@ -164,13 +165,15 @@ def get_positions():
 def close_position(position):
     logger.info(f"Closing position for {symbol}")
 
+    symbol_tick = mt5.symbol_info_tick(symbol)
+
     order = (
         mt5.ORDER_TYPE_BUY
         if position.type == mt5.ORDER_TYPE_SELL
         else mt5.ORDER_TYPE_SELL
     )
 
-    price = mt5.symbol_info_tick(symbol).ask
+    price = symbol_tick.ask if order == mt5.ORDER_TYPE_BUY else symbol_tick.bid
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -194,7 +197,14 @@ def close_position(position):
 def open_position(order):
     logger.info(f"Opening position for {symbol}")
 
-    price = mt5.symbol_info_tick(symbol).ask
+    symbol_tick = mt5.symbol_info_tick(symbol)
+
+    price = symbol_tick.ask if order == mt5.ORDER_TYPE_BUY else symbol_tick.bid
+
+    if order == mt5.ORDER_TYPE_BUY:
+        logger.info(f"Buying {lot} lots of {symbol} at {price}")
+    else:
+        logger.info(f"Selling {lot} lots of {symbol} at {price}")
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -302,7 +312,7 @@ def main():
         return
 
     now = time.time()
-    start_from = now + (60 * 1)
+    start_from = now + (60 * 5)
 
     logger.info("Starting...")
 
@@ -319,7 +329,7 @@ def main():
 
             analyze()
 
-            start_from = start_from + (60 * 1)
+            start_from = start_from + (60 * 5)
 
 
 if __name__ == "__main__":
