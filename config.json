@@ -1,0 +1,22 @@
+{
+    "symbol": "BTCUSDm",
+    "initial_lot": 0.1,
+    "martingle_mode": true,
+    "martingle_multiplier": 2,
+    "sleep": 180,
+    "api_keys": [
+        "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
+        "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8",
+        "AIzaSyBVgf5nTcy3CO6T7x_d2oo5rur5hNLIW2k",
+        "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
+        "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8"
+    ],
+    "timeframes": [
+        {
+            "tf": "M1",
+            "pos": 25
+        }
+    ],
+    "tp": 500,
+    "sl": 300
+}

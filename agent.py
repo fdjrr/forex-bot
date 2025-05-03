@@ -1,4 +1,5 @@
 import enum
+import json
 import pathlib
 import time
 from collections import Counter
@@ -15,27 +16,33 @@ from ta.momentum import RSIIndicator, StochasticOscillator
 from ta.trend import EMAIndicator
 from ta.volatility import BollingerBands
 
-symbol = "BTCUSDm"
+with open("config.json", "r") as f:
+    config = json.load(f.read())
 
-tfs = [
-    (mt5.TIMEFRAME_M1, 25),
-    # (mt5.TIMEFRAME_M5, 25),
-]
+symbol = config["symbol"]
 
-initial_lot = 0.01
-martingle_mode = True
-martingle_multiplier = 2
+tfs = []
+
+for tf, pos in config["timeframes"]:
+    if tf == "M1":
+        tfs.append((mt5.TIMEFRAME_M1, pos))
+    elif tf == "M5":
+        tfs.append((mt5.TIMEFRAME_M5, pos))
+    elif tf == "H1":
+        tfs.append((mt5.TIMEFRAME_H1, pos))
+    elif tf == "H4":
+        tfs.append((mt5.TIMEFRAME_H4, pos))
+    elif tf == "D1":
+        tfs.append((mt5.TIMEFRAME_D1, pos))
+
+initial_lot = config["initial_lot"]
+martingle_mode = config["martingle_mode"]
+martingle_multiplier = config["martingle_multiplier"]
 lot = initial_lot
 deviation = 20
-sleep = 60 * 3
+sleep = config["sleep"]
 
-api_keys = [
-    "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
-    "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8",
-    "AIzaSyBVgf5nTcy3CO6T7x_d2oo5rur5hNLIW2k",
-    "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
-    "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8",
-]
+api_keys = config["api_keys"]
 
 
 class Signal(enum.Enum):
@@ -85,7 +92,7 @@ def get_rates(tf, pos):
 
     df = df.sort_values(by="time", ascending=False)
 
-    path = f"{symbol}_{tf}.csv"
+    path = f"results/{symbol}_{tf}.csv"
 
     df.to_csv(path, index=False)
 
@@ -148,11 +155,14 @@ def open_position(order_type):
 
     symbol_info_tick = mt5.symbol_info_tick(symbol)
 
-    price = (
-        symbol_info_tick.ask
-        if order_type == mt5.ORDER_TYPE_BUY
-        else symbol_info_tick.bid
-    )
+    if order_type == mt5.ORDER_TYPE_BUY:
+        price = symbol_info_tick.ask
+        tp = price + config["tp"]
+        sl = price - config["sl"]
+    else:
+        price = symbol_info_tick.bid
+        tp = price - config["tp"]
+        sl = price + config["sl"]
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -160,6 +170,8 @@ def open_position(order_type):
         "volume": calculate_lot(),
         "type": order_type,
         "price": price,
+        "tp": tp,
+        "sl": sl,
         "deviation": deviation,
         "magic": 234000,
         "comment": "",
@@ -258,7 +270,7 @@ def main():
                     executor.submit(get_rates, tf, pos)
 
             for tf, pos in tfs:
-                path = f"{symbol}_{tf}.csv"
+                path = f"results/{symbol}_{tf}.csv"
                 filepath = pathlib.Path(path)
                 contents.append(
                     types.Part.from_bytes(
