@@ -17,23 +17,23 @@ from ta.trend import EMAIndicator
 from ta.volatility import BollingerBands
 
 with open("config.json", "r") as f:
-    config = json.load(f.read())
+    config = json.load(f)
 
 symbol = config["symbol"]
 
 tfs = []
 
-for tf, pos in config["timeframes"]:
-    if tf == "M1":
-        tfs.append((mt5.TIMEFRAME_M1, pos))
-    elif tf == "M5":
-        tfs.append((mt5.TIMEFRAME_M5, pos))
-    elif tf == "H1":
-        tfs.append((mt5.TIMEFRAME_H1, pos))
-    elif tf == "H4":
-        tfs.append((mt5.TIMEFRAME_H4, pos))
-    elif tf == "D1":
-        tfs.append((mt5.TIMEFRAME_D1, pos))
+for timeframe in config["timeframes"]:
+    if timeframe["tf"] == "M1":
+        tfs.append((mt5.TIMEFRAME_M1, timeframe["pos"]))
+    elif timeframe["tf"] == "M5":
+        tfs.append((mt5.TIMEFRAME_M5, timeframe["pos"]))
+    elif timeframe["tf"] == "H1":
+        tfs.append((mt5.TIMEFRAME_H1, timeframe["pos"]))
+    elif timeframe["tf"] == "H4":
+        tfs.append((mt5.TIMEFRAME_H4, timeframe["pos"]))
+    elif timeframe["tf"] == "D1":
+        tfs.append((mt5.TIMEFRAME_D1, timeframe["pos"]))
 
 initial_lot = config["initial_lot"]
 martingle_mode = config["martingle_mode"]
