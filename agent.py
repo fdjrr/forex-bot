@@ -1,0 +1,306 @@
+import enum
+import pathlib
+import time
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+
+import MetaTrader5 as mt5
+import pandas as pd
+from google import genai
+from google.genai import types
+from loguru import logger
+from pydantic import BaseModel
+from ta.momentum import RSIIndicator, StochasticOscillator
+from ta.trend import EMAIndicator
+from ta.volatility import BollingerBands
+
+symbol = "BTCUSDm"
+
+tfs = [
+    (mt5.TIMEFRAME_M1, 25),
+    # (mt5.TIMEFRAME_M5, 25),
+]
+
+initial_lot = 0.01
+martingle_mode = True
+martingle_multiplier = 2
+lot = initial_lot
+deviation = 20
+sleep = 60 * 3
+
+api_keys = [
+    "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
+    "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8",
+    "AIzaSyBVgf5nTcy3CO6T7x_d2oo5rur5hNLIW2k",
+    "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
+    "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8",
+]
+
+
+class Signal(enum.Enum):
+    SELL = "SELL"
+    BUY = "BUY"
+    WNS = "WAIT & SEE"
+
+
+class Analysis(BaseModel):
+    support: float
+    resistance: float
+    confidence: int
+    reason: str
+    signal: Signal
+
+
+def get_rates(tf, pos):
+    rates = mt5.copy_rates_from_pos(symbol, tf, 0, pos)
+
+    if rates is None:
+        logger.error(
+            f"Failed to get rates for {symbol}. Error code: {mt5.last_error()}"
+        )
+        return None
+
+    df = pd.DataFrame(rates)
+    df["time"] = pd.to_datetime(df["time"], unit="s")
+
+    ema_8 = EMAIndicator(close=df["close"], window=8)
+    ema_21 = EMAIndicator(close=df["close"], window=21)
+    df["EMA_8"] = ema_8.ema_indicator()
+    df["EMA_21"] = ema_21.ema_indicator()
+
+    rsi = RSIIndicator(close=df["close"], window=7)
+    df["RSI"] = rsi.rsi()
+
+    stochastic = StochasticOscillator(
+        high=df["high"], low=df["low"], close=df["close"], window=5, smooth_window=3
+    )
+    df["Stoch_K"] = stochastic.stoch()
+    df["Stoch_D"] = stochastic.stoch_signal()
+
+    bb = BollingerBands(close=df["close"], window=10, window_dev=2)
+    df["BB_High"] = bb.bollinger_hband()
+    df["BB_Low"] = bb.bollinger_lband()
+    df["BB_Mid"] = bb.bollinger_mavg()
+
+    df = df.sort_values(by="time", ascending=False)
+
+    path = f"{symbol}_{tf}.csv"
+
+    df.to_csv(path, index=False)
+
+    logger.info(f"Rates for {symbol} saved to {path}")
+
+    return df
+
+
+def generate_response(api_key, contents):
+    try:
+        client = genai.Client(api_key=api_key)
+
+        config = types.GenerateContentConfig(
+            system_instruction="Analyze the data and provide a trading signal.",
+            response_mime_type="application/json",
+            response_schema=Analysis,
+        )
+
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            config=config,
+            contents=contents,
+        )
+
+        logger.info(f"Response from GenAI: {response.text}")
+
+        return Analysis.model_validate_json(response.text)
+    except Exception as e:
+        logger.error(f"Failed to create GenAI client: {e}")
+        return None
+
+
+def calculate_lot():
+    if not martingle_mode:
+        return initial_lot
+
+    losses = 0
+
+    positions = mt5.positions_get(symbol=symbol)
+
+    if positions and len(positions) > 0:
+        for pos in positions:
+            if pos.profit < 0:
+                losses += 1
+
+    if losses == 0:
+        return initial_lot
+
+    return initial_lot * (martingle_multiplier**losses)
+
+
+def open_position(order_type):
+    symbol_info = mt5.symbol_info(symbol)
+
+    if symbol_info is None:
+        logger.error(
+            f"Failed to get symbol info for {symbol}. Error code: {mt5.last_error()}"
+        )
+        return None
+
+    symbol_info_tick = mt5.symbol_info_tick(symbol)
+
+    price = (
+        symbol_info_tick.ask
+        if order_type == mt5.ORDER_TYPE_BUY
+        else symbol_info_tick.bid
+    )
+
+    request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": symbol,
+        "volume": calculate_lot(),
+        "type": order_type,
+        "price": price,
+        "deviation": deviation,
+        "magic": 234000,
+        "comment": "",
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": mt5.ORDER_FILLING_IOC,
+    }
+
+    result = mt5.order_send(request)
+
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        logger.error(f"Failed to open position. Error code: {result.retcode}")
+    else:
+        logger.info("Position opened successfully.")
+
+
+def close_opposite_positions(signal: Signal):
+    positions = mt5.positions_get(symbol=symbol)
+
+    if positions and len(positions) > 0:
+        for pos in positions:
+            if signal == Signal.BUY and pos.type == mt5.ORDER_TYPE_SELL:
+                close_position(pos, mt5.ORDER_TYPE_BUY)
+
+            elif signal == Signal.SELL and pos.type == mt5.ORDER_TYPE_BUY:
+                close_position(pos, mt5.ORDER_TYPE_SELL)
+
+
+def close_position(position, order_type):
+    symbol_info = mt5.symbol_info(symbol)
+
+    if symbol_info is None:
+        logger.error(
+            f"Failed to get symbol info for {symbol}. Error code: {mt5.last_error()}"
+        )
+        return None
+
+    symbol_info_tick = mt5.symbol_info_tick(symbol)
+
+    price = (
+        symbol_info_tick.ask
+        if order_type == mt5.ORDER_TYPE_BUY
+        else symbol_info_tick.bid
+    )
+
+    request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "position": position.ticket,
+        "symbol": symbol,
+        "volume": position.volume,
+        "type": order_type,
+        "price": price,
+        "deviation": deviation,
+        "magic": 234000,
+        "comment": "",
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": mt5.ORDER_FILLING_IOC,
+    }
+
+    result = mt5.order_send(request)
+
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        logger.error(f"Failed to close position. Error code: {result.retcode}")
+    else:
+        logger.info("Position closed successfully.")
+
+
+def main():
+    logger.add("logs/agent_{time}.log")
+
+    if not mt5.initialize():
+        logger.error("Failed to initialize MetaTrader 5. Error code:", mt5.last_error())
+        return
+
+    logger.info("MetaTrader 5 initialized successfully.")
+
+    account_info = mt5.account_info()
+
+    if account_info is None:
+        logger.error("Failed to get account info. Error code:", mt5.last_error())
+        return
+    else:
+        logger.info(f"Account info: {account_info}")
+
+    while True:
+        now = datetime.now()
+
+        if now.second == 0:
+            logger.info(f"Current time: {now}")
+
+            logger.info("Starting analysis...")
+
+            contents = []
+
+            with ThreadPoolExecutor() as executor:
+                for tf, pos in tfs:
+                    executor.submit(get_rates, tf, pos)
+
+            for tf, pos in tfs:
+                path = f"{symbol}_{tf}.csv"
+                filepath = pathlib.Path(path)
+                contents.append(
+                    types.Part.from_bytes(
+                        data=filepath.read_bytes(),
+                        mime_type="text/csv",
+                    )
+                )
+
+            with ThreadPoolExecutor() as executor:
+                futures = [
+                    executor.submit(generate_response, api_key, contents)
+                    for api_key in api_keys
+                ]
+
+            results = [
+                future.result() for future in futures if future.result() is not None
+            ]
+
+            signals = [res.signal for res in results]
+            signal_count = Counter(signals)
+
+            if signal_count[Signal.BUY] >= 3:
+                order_type = mt5.ORDER_TYPE_BUY
+
+                logger.info("Opening BUY position...")
+
+                close_opposite_positions(Signal.BUY)
+                open_position(order_type)
+            elif signal_count[Signal.SELL] >= 3:
+                order_type = mt5.ORDER_TYPE_SELL
+
+                logger.info("Opening SELL position...")
+
+                close_opposite_positions(Signal.SELL)
+                open_position(order_type)
+            else:
+                logger.info("WAIT & SEE. No action taken.")
+
+            logger.info(f"Waiting for the {sleep} second...")
+
+            time.sleep(sleep)
+
+
+if __name__ == "__main__":
+    main()

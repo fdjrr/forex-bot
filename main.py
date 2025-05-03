@@ -30,7 +30,6 @@ tfs = [
     # (mt5.TIMEFRAME_M30, 200),
 ]
 lot = 0.1
-distance = 300
 deviation = 20
 last_analysis = None
 loop = 1
@@ -299,6 +298,14 @@ Tugas kamu adalah menganalisa data candle tersebut secara mendalam. Lakukan hal 
     except Exception as e:
         logger.error(e)
 
+def run():
+    get_positions()
+
+    with ThreadPoolExecutor() as executor:
+        for tf, count in tfs:
+            executor.submit(get_rates, symbol, tf, count)
+
+    analyze()
 
 def main():
     logger.add("logs/file_{time}.log")
@@ -311,25 +318,24 @@ def main():
         logger.error(f"Symbol {symbol} tidak ditemukan atau tidak bisa dipilih.")
         return
 
-    now = time.time()
-    start_from = now + (60 * 5)
+    start_from = 0
+    interval = 55 * 3
 
     logger.info("Starting...")
 
     while True:
-        now = time.time()
+        now = datetime.now()
+        current_time = time.time()
 
-        if now > start_from:
+        if now.second == 0 and start_from == 0:
+            run()
+            start_from = current_time + interval
 
-            get_positions()
+        elif start_from != 0 and current_time >= start_from:
+            run()
+            start_from += interval
 
-            with ThreadPoolExecutor() as executor:
-                for tf, count in tfs:
-                    executor.submit(get_rates, symbol, tf, count)
-
-            analyze()
-
-            start_from = start_from + (60 * 5)
+        time.sleep(0.5)
 
 
 if __name__ == "__main__":
