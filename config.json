@@ -1,22 +1,35 @@
 {
     "symbol": "BTCUSDm",
-    "initial_lot": 0.1,
-    "martingle_mode": true,
-    "martingle_multiplier": 2,
-    "sleep": 180,
-    "api_keys": [
-        "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
-        "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8",
-        "AIzaSyBVgf5nTcy3CO6T7x_d2oo5rur5hNLIW2k",
-        "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
-        "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8"
-    ],
-    "timeframes": [
-        {
-            "tf": "M1",
-            "pos": 25
-        }
-    ],
-    "tp": 500,
-    "sl": 300
+    "deviation": 20,
+    "min_signal_count": 3,
+    "agent": {
+        "initial_lot": 0.01,
+        "martingle_mode": true,
+        "martingle_multiplier": 2,
+        "sleep": 180,
+        "api_keys": [
+            "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
+            "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8",
+            "AIzaSyBVgf5nTcy3CO6T7x_d2oo5rur5hNLIW2k",
+            "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
+            "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8"
+        ],
+        "gemini_model": "gemini-2.0-flash",
+        "timeframes": [
+            {
+                "tf": "M1",
+                "pos": 25
+            },
+            {
+                "tf": "M5",
+                "pos": 25
+            }
+        ],
+        "system_intruction": "Analyze multiple timeframes of candlestick data and provide a trading signal."
+    },
+    "close": {
+        "tp": 5,
+        "sl": 30,
+        "sleep": 3
+    }
 }

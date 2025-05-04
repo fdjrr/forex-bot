@@ -20,10 +20,12 @@ with open("config.json", "r") as f:
     config = json.load(f)
 
 symbol = config["symbol"]
+deviation = config["deviation"]
+min_signal_count = config["min_signal_count"]
 
 tfs = []
 
-for timeframe in config["timeframes"]:
+for timeframe in config["agent"]["timeframes"]:
     if timeframe["tf"] == "M1":
         tfs.append((mt5.TIMEFRAME_M1, timeframe["pos"]))
     elif timeframe["tf"] == "M5":
@@ -35,14 +37,16 @@ for timeframe in config["timeframes"]:
     elif timeframe["tf"] == "D1":
         tfs.append((mt5.TIMEFRAME_D1, timeframe["pos"]))
 
-initial_lot = config["initial_lot"]
-martingle_mode = config["martingle_mode"]
-martingle_multiplier = config["martingle_multiplier"]
+initial_lot = config["agent"]["initial_lot"]
+martingle_mode = config["agent"]["martingle_mode"]
+martingle_multiplier = config["agent"]["martingle_multiplier"]
 lot = initial_lot
-deviation = 20
-sleep = config["sleep"]
 
-api_keys = config["api_keys"]
+api_keys = config["agent"]["api_keys"]
+gemini_model = config["agent"]["gemini_model"]
+system_instruction = config["agent"]["system_intruction"]
+
+sleep = config["agent"]["sleep"]
 
 
 class Signal(enum.Enum):
@@ -69,6 +73,18 @@ def get_rates(tf, pos):
         return None
 
     df = pd.DataFrame(rates)
+
+    if tf == mt5.TIMEFRAME_M1:
+        df["tf"] = "M1"
+    elif tf == mt5.TIMEFRAME_M5:
+        df["tf"] = "M5"
+    elif tf == mt5.TIMEFRAME_H1:
+        df["tf"] = "H1"
+    elif tf == mt5.TIMEFRAME_H4:
+        df["tf"] = "H4"
+    elif tf == mt5.TIMEFRAME_D1:
+        df["tf"] = "D1"
+
     df["time"] = pd.to_datetime(df["time"], unit="s")
 
     ema_8 = EMAIndicator(close=df["close"], window=8)
@@ -106,13 +122,13 @@ def generate_response(api_key, contents):
         client = genai.Client(api_key=api_key)
 
         config = types.GenerateContentConfig(
-            system_instruction="Analyze the data and provide a trading signal.",
+            system_instruction=system_instruction,
             response_mime_type="application/json",
             response_schema=Analysis,
         )
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model=gemini_model,
             config=config,
             contents=contents,
         )
@@ -145,24 +161,9 @@ def calculate_lot():
 
 
 def open_position(order_type):
-    symbol_info = mt5.symbol_info(symbol)
+    symbol_tick = mt5.symbol_info_tick(symbol)
 
-    if symbol_info is None:
-        logger.error(
-            f"Failed to get symbol info for {symbol}. Error code: {mt5.last_error()}"
-        )
-        return None
-
-    symbol_info_tick = mt5.symbol_info_tick(symbol)
-
-    if order_type == mt5.ORDER_TYPE_BUY:
-        price = symbol_info_tick.ask
-        tp = price + config["tp"]
-        sl = price - config["sl"]
-    else:
-        price = symbol_info_tick.bid
-        tp = price - config["tp"]
-        sl = price + config["sl"]
+    price = symbol_tick.ask if order_type == mt5.ORDER_TYPE_BUY else symbol_tick.bid
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -170,8 +171,6 @@ def open_position(order_type):
         "volume": calculate_lot(),
         "type": order_type,
         "price": price,
-        "tp": tp,
-        "sl": sl,
         "deviation": deviation,
         "magic": 234000,
         "comment": "",
@@ -292,7 +291,7 @@ def main():
             signals = [res.signal for res in results]
             signal_count = Counter(signals)
 
-            if signal_count[Signal.BUY] >= 3:
+            if signal_count[Signal.BUY] >= min_signal_count:
                 order_type = mt5.ORDER_TYPE_BUY
 
                 logger.info("Opening BUY position...")
