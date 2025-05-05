@@ -1,12 +1,12 @@
 {
-    "symbol": "BTCUSDm",
+    "symbol": "XAUUSDm",
     "deviation": 20,
     "min_signal_count": 3,
     "agent": {
         "initial_lot": 0.01,
         "martingle_mode": true,
         "martingle_multiplier": 2,
-        "sleep": 180,
+        "sleep": 60,
         "api_keys": [
             "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
             "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8",
@@ -25,11 +25,11 @@
                 "pos": 25
             }
         ],
-        "system_intruction": "Analyze multiple timeframes of candlestick data and provide a trading signal."
+        "system_instruction": "Analyze multiple timeframes of candlestick data and provide a trading signal."
     },
     "close": {
-        "tp": 5,
-        "sl": 30,
-        "sleep": 3
+        "tp": 10,
+        "sl": 20,
+        "sleep": 0.5
     }
 }

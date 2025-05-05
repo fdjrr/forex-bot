@@ -44,7 +44,7 @@ lot = initial_lot
 
 api_keys = config["agent"]["api_keys"]
 gemini_model = config["agent"]["gemini_model"]
-system_instruction = config["agent"]["system_intruction"]
+system_instruction = config["agent"]["system_instruction"]
 
 sleep = config["agent"]["sleep"]
 

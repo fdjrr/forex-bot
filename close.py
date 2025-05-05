@@ -66,30 +66,25 @@ def main():
         logger.info(f"Account info: {account_info}")
 
     while True:
-        now = datetime.now()
+        logger.info("Checking positions...")
 
-        if now.second == 0:
-            logger.info(f"Current time: {now}")
+        positions = mt5.positions_get(symbol=symbol)
 
-            logger.info("Checking positions...")
+        if positions and len(positions) > 0:
+            profit = sum(pos.profit for pos in positions)
 
-            positions = mt5.positions_get(symbol=symbol)
+            logger.info(f"Profit/Loss: {profit}")
 
-            if positions and len(positions) > 0:
-                profit = sum(pos.profit for pos in positions)
+            if profit >= tp or profit <= -sl:
+                with ThreadPoolExecutor() as executor:
+                    for position in positions:
+                        executor.submit(close_position, position)
+        else:
+            logger.info("No positions found.")
 
-                logger.info(f"Profit/Loss: {profit}")
+        logger.info(f"Waiting for the {sleep} second...")
 
-                if profit >= tp or profit <= -sl:
-                    with ThreadPoolExecutor() as executor:
-                        for position in positions:
-                            executor.submit(close_position, position)
-            else:
-                logger.info("No positions found.")
-
-            logger.info(f"Waiting for the {sleep} second...")
-
-            time.sleep(sleep)
+        time.sleep(sleep)
 
 
 if __name__ == "__main__":
