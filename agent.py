@@ -41,6 +41,7 @@ initial_lot = config["agent"]["initial_lot"]
 martingle_mode = config["agent"]["martingle_mode"]
 martingle_multiplier = config["agent"]["martingle_multiplier"]
 lot = initial_lot
+loop = config["agent"]["loop"]
 
 api_keys = config["agent"]["api_keys"]
 gemini_model = config["agent"]["gemini_model"]
@@ -257,60 +258,63 @@ def main():
     while True:
         now = datetime.now()
 
-        if now.second == 0:
-            logger.info(f"Current time: {now}")
+        logger.info(f"Current time: {now}")
 
-            logger.info("Starting analysis...")
+        logger.info("Starting analysis...")
 
-            contents = []
+        contents = []
 
-            with ThreadPoolExecutor() as executor:
-                for tf, pos in tfs:
-                    executor.submit(get_rates, tf, pos)
-
+        with ThreadPoolExecutor() as executor:
             for tf, pos in tfs:
-                path = f"results/{symbol}_{tf}.csv"
-                filepath = pathlib.Path(path)
-                contents.append(
-                    types.Part.from_bytes(
-                        data=filepath.read_bytes(),
-                        mime_type="text/csv",
-                    )
+                executor.submit(get_rates, tf, pos)
+
+        for tf, pos in tfs:
+            path = f"results/{symbol}_{tf}.csv"
+            filepath = pathlib.Path(path)
+            contents.append(
+                types.Part.from_bytes(
+                    data=filepath.read_bytes(),
+                    mime_type="text/csv",
                 )
+            )
 
-            with ThreadPoolExecutor() as executor:
-                futures = [
-                    executor.submit(generate_response, api_key, contents)
-                    for api_key in api_keys
-                ]
-
-            results = [
-                future.result() for future in futures if future.result() is not None
+        with ThreadPoolExecutor() as executor:
+            futures = [
+                executor.submit(generate_response, api_key, contents)
+                for api_key in api_keys
             ]
 
-            signals = [res.signal for res in results]
-            signal_count = Counter(signals)
+        results = [future.result() for future in futures if future.result() is not None]
 
-            if signal_count[Signal.BUY] >= min_signal_count:
-                order_type = mt5.ORDER_TYPE_BUY
+        signals = [res.signal for res in results]
+        signal_count = Counter(signals)
 
-                logger.info("Opening BUY position...")
+        if signal_count[Signal.BUY] >= min_signal_count:
+            order_type = mt5.ORDER_TYPE_BUY
 
-                close_opposite_positions(Signal.BUY)
-                open_position(order_type)
-            elif signal_count[Signal.SELL] >= 3:
-                order_type = mt5.ORDER_TYPE_SELL
+            logger.info("Opening BUY position...")
 
-                logger.info("Opening SELL position...")
+            close_opposite_positions(Signal.BUY)
 
-                close_opposite_positions(Signal.SELL)
-                open_position(order_type)
-            else:
-                logger.info("WAIT & SEE. No action taken.")
+            with ThreadPoolExecutor() as executor:
+                for x in range(loop):
+                    executor.submit(open_position, order_type)
+        elif signal_count[Signal.SELL] >= 3:
+            order_type = mt5.ORDER_TYPE_SELL
 
-            logger.info(f"Waiting for the {sleep} second...")
+            logger.info("Opening SELL position...")
 
-            time.sleep(sleep)
+            close_opposite_positions(Signal.SELL)
+
+            with ThreadPoolExecutor() as executor:
+                for x in range(loop):
+                    executor.submit(open_position, order_type)
+        else:
+            logger.info("WAIT & SEE. No action taken.")
+
+        logger.info(f"Waiting for the {sleep} second...")
+
+        time.sleep(sleep)
 
 
 if __name__ == "__main__":

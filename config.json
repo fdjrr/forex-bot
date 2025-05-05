@@ -6,6 +6,7 @@
         "initial_lot": 0.01,
         "martingle_mode": true,
         "martingle_multiplier": 2,
+        "loop": 1,
         "sleep": 60,
         "api_keys": [
             "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
