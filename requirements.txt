@@ -6,3 +6,4 @@ python-dotenv
 ta
 pyautogui
 pygetwindow
+pillow

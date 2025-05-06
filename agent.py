@@ -217,6 +217,8 @@ def open_position(order_type):
 
     result = mt5.order_send(request)
 
+    logger.info(result)
+
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         logger.error(f"Failed to open position. Error code: {result.retcode}")
     else:
