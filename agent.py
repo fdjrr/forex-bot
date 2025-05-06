@@ -1,5 +1,6 @@
 import enum
 import json
+import os
 import pathlib
 import time
 from collections import Counter
@@ -8,6 +9,8 @@ from datetime import datetime
 
 import MetaTrader5 as mt5
 import pandas as pd
+import pyautogui
+import pygetwindow as gw
 from google import genai
 from google.genai import types
 from loguru import logger
@@ -140,6 +143,31 @@ def generate_response(api_key, contents):
     except Exception as e:
         logger.error(f"Failed to create GenAI client: {e}")
         return None
+
+
+def capture_window(path):
+    mt5_window = None
+    for window in gw.getAllTitles():
+        if "Hedge" in window:
+            mt5_window = gw.getWindowsWithTitle(window)[0]
+            break
+
+    mt5_window.activate()
+
+    time.sleep(2)
+
+    x, y, width, height = (
+        mt5_window.left,
+        mt5_window.top,
+        mt5_window.width,
+        mt5_window.height,
+    )
+
+    screenshot = pyautogui.screenshot(region=(x, y, width, height))
+
+    screenshot.save(path)
+
+    logger.info(f"Screenshot saved to {path}")
 
 
 def calculate_lot():
@@ -275,6 +303,19 @@ def main():
                 types.Part.from_bytes(
                     data=filepath.read_bytes(),
                     mime_type="text/csv",
+                )
+            )
+
+        path = "screenshot.png"
+
+        capture_window(path)
+
+        if os.path.exists(path):
+            filepath = pathlib.Path(path)
+            contents.append(
+                types.Part.from_bytes(
+                    data=filepath.read_bytes(),
+                    mime_type="image/png",
                 )
             )
 
