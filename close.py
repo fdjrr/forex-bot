@@ -1,4 +1,6 @@
+import csv
 import json
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -15,6 +17,13 @@ deviation = config["deviation"]
 tp = config["close"]["tp"]
 sl = config["close"]["sl"]
 sleep = config["close"]["sleep"]
+
+path = "trade_log.csv"
+
+if not os.path.exists(path):
+    with open(path, mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["ticket", "order_type", "profit", "last_closed_at"])
 
 
 def close_position(position):
@@ -41,11 +50,23 @@ def close_position(position):
         "type_filling": mt5.ORDER_FILLING_IOC,
     }
 
-    logger.info(f"Closing position for {symbol}")
-
     result = mt5.order_send(request)
 
     logger.info(result)
+
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        logger.error(f"Failed to close position. Error code: {result.retcode}")
+    else:
+        now = datetime.now()
+        last_closed_at = now.strftime("%Y-%m-%d %H:%M:%S")
+
+        with open(path, mode="a", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [position.ticket, position.type, position.profit, last_closed_at]
+            )
+
+        logger.info("Position closed successfully.")
 
 
 def main():

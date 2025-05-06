@@ -1,3 +1,4 @@
+import csv
 import enum
 import json
 import os
@@ -51,6 +52,13 @@ gemini_model = config["agent"]["gemini_model"]
 system_instruction = config["agent"]["system_instruction"]
 
 sleep = config["agent"]["sleep"]
+
+path = "trade_log.csv"
+
+if not os.path.exists(path):
+    with open(path, mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["ticket", "order_type", "profit", "last_closed_at"])
 
 
 class Signal(enum.Enum):
@@ -228,21 +236,9 @@ def close_opposite_positions(signal: Signal):
 
 
 def close_position(position, order_type):
-    symbol_info = mt5.symbol_info(symbol)
+    symbol_tick = mt5.symbol_info_tick(symbol)
 
-    if symbol_info is None:
-        logger.error(
-            f"Failed to get symbol info for {symbol}. Error code: {mt5.last_error()}"
-        )
-        return None
-
-    symbol_info_tick = mt5.symbol_info_tick(symbol)
-
-    price = (
-        symbol_info_tick.ask
-        if order_type == mt5.ORDER_TYPE_BUY
-        else symbol_info_tick.bid
-    )
+    price = symbol_tick.ask if order_type == mt5.ORDER_TYPE_BUY else symbol_tick.bid
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -260,9 +256,20 @@ def close_position(position, order_type):
 
     result = mt5.order_send(request)
 
+    logger.info(result)
+
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         logger.error(f"Failed to close position. Error code: {result.retcode}")
     else:
+        now = datetime.now()
+        last_closed_at = now.strftime("%Y-%m-%d %H:%M:%S")
+
+        with open(path, mode="a", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [position.ticket, position.type, position.profit, last_closed_at]
+            )
+
         logger.info("Position closed successfully.")
 
 
