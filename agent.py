@@ -26,6 +26,8 @@ with open("config.json", "r") as f:
 symbol = config["symbol"]
 deviation = config["deviation"]
 min_signal_count = config["min_signal_count"]
+capture = config["capture"]
+capture_path = config["capture_path"]
 
 tfs = []
 
@@ -49,9 +51,18 @@ loop = config["agent"]["loop"]
 
 api_keys = config["agent"]["api_keys"]
 gemini_model = config["agent"]["gemini_model"]
-system_instruction = config["agent"]["system_instruction"]
+system_path = config["agent"]["system_path"]
+prompt_path = config["agent"]["prompt_path"]
+
+with open(system_path, "r", encoding="utf-8") as f:
+    system_instruction = f.read()
+
+with open(prompt_path, "r", encoding="utf-8") as f:
+    prompt = f.read()
 
 sleep = config["agent"]["sleep"]
+start_hour = config["start_hour"]
+end_hour = config["end_hour"]
 
 path = "trade_log.csv"
 
@@ -67,12 +78,26 @@ class Signal(enum.Enum):
     WNS = "WAIT & SEE"
 
 
+class Trend(enum.Enum):
+    BULLISH = "Bullish"
+    BEARISH = "Bearish"
+    NEUTRAL = "Neutral"
+
+
+class Momentum(enum.Enum):
+    OVERSOLD = "Oversold"
+    OVERBOUGHT = "Overbought"
+    NEUTRAL = "Neutral"
+
+
 class Analysis(BaseModel):
     support: float
     resistance: float
     confidence: int
-    reason: str
+    trend: Trend
+    momentum: Momentum
     signal: Signal
+    justification: str
 
 
 def get_rates(tf, pos):
@@ -153,29 +178,34 @@ def generate_response(api_key, contents):
         return None
 
 
-def capture_window(path):
-    mt5_window = None
-    for window in gw.getAllTitles():
-        if "Hedge" in window:
-            mt5_window = gw.getWindowsWithTitle(window)[0]
-            break
+def capture_window():
+    try:
+        logger.info("Capturing window...")
 
-    mt5_window.activate()
+        mt5_window = None
+        for window in gw.getAllTitles():
+            if "Hedge" in window:
+                mt5_window = gw.getWindowsWithTitle(window)[0]
+                break
 
-    time.sleep(2)
+        mt5_window.activate()
 
-    x, y, width, height = (
-        mt5_window.left,
-        mt5_window.top,
-        mt5_window.width,
-        mt5_window.height,
-    )
+        time.sleep(2)
 
-    screenshot = pyautogui.screenshot(region=(x, y, width, height))
+        x, y, width, height = (
+            mt5_window.left,
+            mt5_window.top,
+            mt5_window.width,
+            mt5_window.height,
+        )
 
-    screenshot.save(path)
+        screenshot = pyautogui.screenshot(region=(x, y, width, height))
 
-    logger.info(f"Screenshot saved to {path}")
+        screenshot.save(capture_path)
+
+        logger.info(f"Screenshot saved to {capture_path}")
+    except Exception as e:
+        logger.error(f"Failed to capture window: {e}")
 
 
 def calculate_lot():
@@ -295,76 +325,82 @@ def main():
     while True:
         now = datetime.now()
 
-        logger.info(f"Current time: {now}")
+        if now.hour >= start_hour and now.hour <= end_hour:
+            logger.info(f"Current time: {now}")
 
-        logger.info("Starting analysis...")
+            logger.info("Starting analysis...")
 
-        contents = []
+            contents = []
 
-        with ThreadPoolExecutor() as executor:
+            with ThreadPoolExecutor() as executor:
+                for tf, pos in tfs:
+                    executor.submit(get_rates, tf, pos)
+
             for tf, pos in tfs:
-                executor.submit(get_rates, tf, pos)
-
-        for tf, pos in tfs:
-            path = f"results/{symbol}_{tf}.csv"
-            filepath = pathlib.Path(path)
-            contents.append(
-                types.Part.from_bytes(
-                    data=filepath.read_bytes(),
-                    mime_type="text/csv",
+                path = f"results/{symbol}_{tf}.csv"
+                filepath = pathlib.Path(path)
+                contents.append(
+                    types.Part.from_bytes(
+                        data=filepath.read_bytes(),
+                        mime_type="text/csv",
+                    )
                 )
-            )
 
-        path = "screenshot.png"
+            if capture:
+                capture_window()
 
-        capture_window(path)
+                if os.path.exists(capture_path):
+                    filepath = pathlib.Path(capture_path)
+                    contents.append(
+                        types.Part.from_bytes(
+                            data=filepath.read_bytes(),
+                            mime_type="image/png",
+                        )
+                    )
 
-        if os.path.exists(path):
-            filepath = pathlib.Path(path)
-            contents.append(
-                types.Part.from_bytes(
-                    data=filepath.read_bytes(),
-                    mime_type="image/png",
-                )
-            )
+            contents.append(prompt)
 
-        with ThreadPoolExecutor() as executor:
-            futures = [
-                executor.submit(generate_response, api_key, contents)
-                for api_key in api_keys
+            with ThreadPoolExecutor() as executor:
+                futures = [
+                    executor.submit(generate_response, api_key, contents)
+                    for api_key in api_keys
+                ]
+
+            results = [
+                future.result() for future in futures if future.result() is not None
             ]
 
-        results = [future.result() for future in futures if future.result() is not None]
+            signals = [res.signal for res in results]
+            signal_count = Counter(signals)
 
-        signals = [res.signal for res in results]
-        signal_count = Counter(signals)
+            if signal_count[Signal.BUY] >= min_signal_count:
+                order_type = mt5.ORDER_TYPE_BUY
 
-        if signal_count[Signal.BUY] >= min_signal_count:
-            order_type = mt5.ORDER_TYPE_BUY
+                logger.info("Opening BUY position...")
 
-            logger.info("Opening BUY position...")
+                close_opposite_positions(Signal.BUY)
 
-            close_opposite_positions(Signal.BUY)
+                with ThreadPoolExecutor() as executor:
+                    for x in range(loop):
+                        executor.submit(open_position, order_type)
+            elif signal_count[Signal.SELL] >= 3:
+                order_type = mt5.ORDER_TYPE_SELL
 
-            with ThreadPoolExecutor() as executor:
-                for x in range(loop):
-                    executor.submit(open_position, order_type)
-        elif signal_count[Signal.SELL] >= 3:
-            order_type = mt5.ORDER_TYPE_SELL
+                logger.info("Opening SELL position...")
 
-            logger.info("Opening SELL position...")
+                close_opposite_positions(Signal.SELL)
 
-            close_opposite_positions(Signal.SELL)
+                with ThreadPoolExecutor() as executor:
+                    for x in range(loop):
+                        executor.submit(open_position, order_type)
+            else:
+                logger.info("WAIT & SEE. No action taken.")
 
-            with ThreadPoolExecutor() as executor:
-                for x in range(loop):
-                    executor.submit(open_position, order_type)
+            logger.info(f"Waiting for the {sleep} second...")
+
+            time.sleep(sleep)
         else:
-            logger.info("WAIT & SEE. No action taken.")
-
-        logger.info(f"Waiting for the {sleep} second...")
-
-        time.sleep(sleep)
+            time.sleep(60 * 60)  # sleep for 1 hour
 
 
 if __name__ == "__main__":

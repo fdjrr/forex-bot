@@ -17,6 +17,8 @@ deviation = config["deviation"]
 tp = config["close"]["tp"]
 sl = config["close"]["sl"]
 sleep = config["close"]["sleep"]
+start_hour = config["start_hour"]
+end_hour = config["end_hour"]
 
 path = "trade_log.csv"
 
@@ -87,25 +89,30 @@ def main():
         logger.info(f"Account info: {account_info}")
 
     while True:
-        logger.info("Checking positions...")
+        now = datetime.now()
 
-        positions = mt5.positions_get(symbol=symbol)
+        if now.hour >= start_hour and now.hour <= end_hour:
+            logger.info("Checking positions...")
 
-        if positions and len(positions) > 0:
-            profit = sum(pos.profit for pos in positions)
+            positions = mt5.positions_get(symbol=symbol)
 
-            logger.info(f"Profit/Loss: {profit}")
+            if positions and len(positions) > 0:
+                profit = sum(pos.profit for pos in positions)
 
-            if profit >= tp or profit <= -sl:
-                with ThreadPoolExecutor() as executor:
-                    for position in positions:
-                        executor.submit(close_position, position)
+                logger.info(f"Profit/Loss: {profit}")
+
+                if profit >= tp or profit <= -sl:
+                    with ThreadPoolExecutor() as executor:
+                        for position in positions:
+                            executor.submit(close_position, position)
+            else:
+                logger.info("No positions found.")
+
+            logger.info(f"Waiting for the {sleep} second...")
+
+            time.sleep(sleep)
         else:
-            logger.info("No positions found.")
-
-        logger.info(f"Waiting for the {sleep} second...")
-
-        time.sleep(sleep)
+            time.sleep(60 * 60)  # sleep for 1 hour
 
 
 if __name__ == "__main__":

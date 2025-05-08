@@ -2,6 +2,8 @@
     "symbol": "XAUUSDm",
     "deviation": 20,
     "min_signal_count": 3,
+    "capture": false,
+    "capture_path": "screenshot.png",
     "agent": {
         "initial_lot": 0.01,
         "martingle_mode": true,
@@ -26,11 +28,14 @@
                 "pos": 25
             }
         ],
-        "system_instruction": "Analyze multiple timeframes of candlestick data and provide a trading signal."
+        "system_path": "system.txt",
+        "prompt_path": "prompt.txt"
     },
     "close": {
         "tp": 10,
         "sl": 20,
         "sleep": 0.5
-    }
+    },
+    "start_hour": 8,
+    "end_hour": 22
 }
