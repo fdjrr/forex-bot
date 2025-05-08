@@ -6,7 +6,7 @@
     "capture_path": "screenshot.png",
     "agent": {
         "initial_lot": 0.01,
-        "martingle_mode": true,
+        "martingle_mode": false,
         "martingle_multiplier": 2,
         "loop": 1,
         "sleep": 60,
@@ -33,7 +33,7 @@
     },
     "close": {
         "tp": 10,
-        "sl": 20,
+        "sl": 10,
         "sleep": 0.5
     },
     "start_hour": 8,
