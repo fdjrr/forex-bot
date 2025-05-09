@@ -365,9 +365,9 @@ def main():
                 random.choices(string.ascii_uppercase + string.digits, k=32)
             )
 
-            prompt = prompt.format(signal_id=signal_id)
+            formatted_prompt = prompt.format(signal_id=signal_id)
 
-            contents.append(prompt)
+            contents.append(formatted_prompt)
 
             with ThreadPoolExecutor() as executor:
                 futures = [
