@@ -4,6 +4,9 @@
     "min_signal_count": 3,
     "capture": false,
     "capture_path": "screenshot.png",
+    "trade_log_path": "trade_log.csv",
+    "start_hour": 8,
+    "end_hour": 22,
     "agent": {
         "initial_lot": 0.01,
         "martingle_mode": false,
@@ -38,7 +41,5 @@
         "sl": -5,
         "summary_sl": false,
         "sleep": 0.5
-    },
-    "start_hour": 8,
-    "end_hour": 22
+    }
 }

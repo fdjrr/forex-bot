@@ -30,6 +30,34 @@ deviation = config["deviation"]
 min_signal_count = config["min_signal_count"]
 capture = config["capture"]
 capture_path = config["capture_path"]
+start_hour = config["start_hour"]
+end_hour = config["end_hour"]
+
+trade_log_path = config["trade_log_path"]
+
+if not os.path.exists(trade_log_path):
+    with open(trade_log_path, mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["ticket", "order_type", "profit", "last_closed_at"])
+
+
+analysis_log_path = config["analysis_log_path"]
+
+if not os.path.exists(analysis_log_path):
+    with open(analysis_log_path, mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(
+            [
+                "signal_id",
+                "support",
+                "resistance",
+                "confidence",
+                "trend",
+                "momentum",
+                "signal",
+                "reason",
+            ]
+        )
 
 tfs = []
 
@@ -63,15 +91,6 @@ with open(prompt_path, "r", encoding="utf-8") as f:
     prompt = f.read()
 
 sleep = config["agent"]["sleep"]
-start_hour = config["start_hour"]
-end_hour = config["end_hour"]
-
-path = "trade_log.csv"
-
-if not os.path.exists(path):
-    with open(path, mode="w", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(["ticket", "order_type", "profit", "last_closed_at"])
 
 
 class Signal(enum.Enum):
@@ -174,6 +193,21 @@ def generate_response(api_key, contents):
         )
 
         logger.info(f"Response from GenAI: {response.text}")
+
+        with open(analysis_log_path, mode="a", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    response.text["signal_id"],
+                    response.text["support"],
+                    response.text["resistance"],
+                    response.text["confidence"],
+                    response.text["trend"],
+                    response.text["momentum"],
+                    response.text["signal"],
+                    response.text["reason"],
+                ]
+            )
 
         return Analysis.model_validate_json(response.text)
     except Exception as e:
@@ -299,7 +333,7 @@ def close_position(position, order_type):
         now = datetime.now()
         last_closed_at = now.strftime("%Y-%m-%d %H:%M:%S")
 
-        with open(path, mode="a", newline="") as file:
+        with open(trade_log_path, mode="a", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(
                 [position.ticket, position.type, position.profit, last_closed_at]

@@ -22,10 +22,10 @@ sleep = config["close"]["sleep"]
 start_hour = config["start_hour"]
 end_hour = config["end_hour"]
 
-path = "trade_log.csv"
+trade_log_path = config["trade_log_path"]
 
-if not os.path.exists(path):
-    with open(path, mode="w", newline="") as file:
+if not os.path.exists(trade_log_path):
+    with open(trade_log_path, mode="w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(["ticket", "order_type", "profit", "last_closed_at"])
 
@@ -64,7 +64,7 @@ def close_position(position):
         now = datetime.now()
         last_closed_at = now.strftime("%Y-%m-%d %H:%M:%S")
 
-        with open(path, mode="a", newline="") as file:
+        with open(trade_log_path, mode="a", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(
                 [position.ticket, position.type, position.profit, last_closed_at]
