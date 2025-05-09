@@ -192,24 +192,26 @@ def generate_response(api_key, contents):
             contents=contents,
         )
 
-        logger.info(f"Response from GenAI: {response.text}")
+        response_data = json.loads(response.text)
+
+        logger.info(f"Response from GenAI: {response_data}")
 
         with open(analysis_log_path, mode="a", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(
                 [
-                    response.text["signal_id"],
-                    response.text["support"],
-                    response.text["resistance"],
-                    response.text["confidence"],
-                    response.text["trend"],
-                    response.text["momentum"],
-                    response.text["signal"],
-                    response.text["reason"],
+                    response_data["signal_id"],
+                    response_data["support"],
+                    response_data["resistance"],
+                    response_data["confidence"],
+                    response_data["trend"],
+                    response_data["momentum"],
+                    response_data["signal"],
+                    response_data["reason"],
                 ]
             )
 
-        return Analysis.model_validate_json(response.text)
+        return Analysis.model_validate(response_data)
     except Exception as e:
         logger.error(f"Failed to create GenAI client: {e}")
         return None
