@@ -3,6 +3,8 @@ import enum
 import json
 import os
 import pathlib
+import random
+import string
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -91,13 +93,14 @@ class Momentum(enum.Enum):
 
 
 class Analysis(BaseModel):
+    signal_id: str
     support: float
     resistance: float
     confidence: int
     trend: Trend
     momentum: Momentum
     signal: Signal
-    justification: str
+    reason: str
 
 
 def get_rates(tf, pos):
@@ -357,6 +360,12 @@ def main():
                             mime_type="image/png",
                         )
                     )
+
+            signal_id = "".join(
+                random.choices(string.ascii_uppercase + string.digits, k=32)
+            )
+
+            prompt = prompt.format(signal_id=signal_id)
 
             contents.append(prompt)
 

@@ -1,1 +1,3 @@
+Signal ID : {signal_id}
+
 Analyze multiple timeframes of candlestick data and provide a trading signal.
