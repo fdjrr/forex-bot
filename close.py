@@ -120,13 +120,13 @@ def main():
 
                     logger.info(f"Loss: {loss}")
 
-                    if loss >= sl:
+                    if loss <= sl:
                         with ThreadPoolExecutor() as executor:
                             for position in positions:
                                 executor.submit(close_position, position)
                 else:
                     for pos in positions:
-                        if pos.profit >= sl:
+                        if pos.profit <= sl:
                             logger.info(f"Loss: {pos.profit}")
 
                             close_position(pos)
