@@ -31,9 +31,11 @@
         "system_path": "system.txt",
         "prompt_path": "prompt.txt"
     },
-    "close": {
+    "close": {      
         "tp": 10,
-        "sl": 10,
+        "summary_tp": true,
+        "sl": -5,
+        "summary_sl": false,
         "sleep": 0.5
     },
     "start_hour": 8,

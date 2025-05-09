@@ -15,7 +15,9 @@ symbol = config["symbol"]
 deviation = config["deviation"]
 
 tp = config["close"]["tp"]
+summary_tp = config["close"]["summary_tp"]
 sl = config["close"]["sl"]
+summary_sl = config["close"]["summary_sl"]
 sleep = config["close"]["sleep"]
 start_hour = config["start_hour"]
 end_hour = config["end_hour"]
@@ -97,14 +99,38 @@ def main():
             positions = mt5.positions_get(symbol=symbol)
 
             if positions and len(positions) > 0:
-                profit = sum(pos.profit for pos in positions)
+                if summary_tp:
+                    profit = sum(pos.profit for pos in positions)
 
-                logger.info(f"Profit/Loss: {profit}")
+                    logger.info(f"Profit: {profit}")
 
-                if profit >= tp or profit <= -sl:
-                    with ThreadPoolExecutor() as executor:
-                        for position in positions:
-                            executor.submit(close_position, position)
+                    if profit >= tp:
+                        with ThreadPoolExecutor() as executor:
+                            for position in positions:
+                                executor.submit(close_position, position)
+                else:
+                    for pos in positions:
+                        if pos.profit >= tp:
+                            logger.info(f"Profit: {pos.profit}")
+
+                            close_position(pos)
+
+                if summary_sl:
+                    loss = sum(pos.profit for pos in positions)
+
+                    logger.info(f"Loss: {loss}")
+
+                    if loss >= sl:
+                        with ThreadPoolExecutor() as executor:
+                            for position in positions:
+                                executor.submit(close_position, position)
+                else:
+                    for pos in positions:
+                        if pos.profit >= sl:
+                            logger.info(f"Loss: {pos.profit}")
+
+                            close_position(pos)
+
             else:
                 logger.info("No positions found.")
 
