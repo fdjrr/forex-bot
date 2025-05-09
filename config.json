@@ -9,13 +9,14 @@
         "martingle_mode": false,
         "martingle_multiplier": 2,
         "loop": 1,
-        "sleep": 60,
+        "sleep": 180,
         "api_keys": [
             "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
             "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8",
             "AIzaSyBVgf5nTcy3CO6T7x_d2oo5rur5hNLIW2k",
             "AIzaSyBVnJZbFdljbP4ztbH14ZSJktqr0nkIzvM",
-            "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8"
+            "AIzaSyA8-_dgHAwKtbmKjrvunnXdFCCEP9iWx_8",
+            "AIzaSyBVgf5nTcy3CO6T7x_d2oo5rur5hNLIW2k"
         ],
         "gemini_model": "gemini-2.0-flash",
         "timeframes": [
